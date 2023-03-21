@@ -16,9 +16,24 @@
 
 package ab.december;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
 public class App {
 
-  public static void main(String[] args) {
-    System.out.println(new GptThree().makeNews("Should you quit being a pigeon? Ornithologists say yes!"));
+  public static final String TAGLINE = "Should you quit being a pigeon? Ornithologists say yes!";
+
+  public static void main(String[] args) throws Exception {
+    GptThree gptThree = new GptThree();
+    // CBC NEWS NETWORK is Canada's most trusted 24-hour news channel
+    String xml = GptThree.httpGet("https://www.cbc.ca/cmlink/rss-canada-montreal");
+    JsonNode items = new XmlMapper().readTree(xml).get("channel").get("item");
+    for (JsonNode item : items) {
+      String description = item.get("description").textValue().replaceAll("<[^>]*>", "").trim();
+      String s = gptThree.makeNews(item.get("title").textValue(), description);
+
+      System.out.println(s);
+      break; // circuit
+    }
   }
 }

@@ -59,11 +59,15 @@ public class GptThree {
     log.info("GPT url: " + gptUrl);
   }
 
+  public static String httpGet(String url) throws IOException, InterruptedException {
+    return HttpClient.newBuilder().build().send(
+        HttpRequest.newBuilder().uri(URI.create(url)).GET().build(),
+        HttpResponse.BodyHandlers.ofString()).body();
+  }
+
   public static boolean isLocal() {
     try {
-      String s = HttpClient.newBuilder().build().send(
-          HttpRequest.newBuilder().uri(URI.create(URL_LOCAL + "moderations")).GET().build(),
-          HttpResponse.BodyHandlers.ofString()).body();
+      String s = httpGet(URL_LOCAL + "moderations");
       return !s.isEmpty() && s.charAt(0) == '{';
     } catch (IOException | InterruptedException e) {
       return false;
@@ -127,13 +131,24 @@ public class GptThree {
         .POST(HttpRequest.BodyPublishers.ofByteArray(input)));
     JsonNode choices = response.get("choices");
     return IntStream.range(0, choices.size()).mapToObj(choices::get)
-        .map(choice -> choice.get("text").textValue().trim()).collect(Collectors.toList());
+        .map(choice -> choice.get("text").textValue()).collect(Collectors.toList());
   }
 
-  public String makeNews(String headline) {
-    if (isFlagged(headline)) return null;
-    String prompt = String.format("Latest news.%nHeadline: %s%n%nText:", headline);
-    List<String> results = completions(GPT3_MODELS[0], prompt).stream()
+  public static final String[] CONTEXT_KEY = {"Headline", "Description", "Tagline"};
+  public String makeNews(String... context) {
+    for (String text : context) {
+      if (isFlagged(text)) return null;
+    }
+
+    StringBuilder prompt = new StringBuilder();
+    prompt.append("Latest news.\n\n");
+    for (int i = 0; i < Math.min(CONTEXT_KEY.length, context.length); i++) {
+      prompt.append(CONTEXT_KEY[i]).append(": ").append(context[i]).append("\n\n");
+    }
+    prompt.append("Text:");
+
+    List<String> results = completions(GPT3_MODELS[0], prompt.toString()).stream()
+        .map(u -> u.replaceFirst("[^.]*\\z", "").replace("Text:", "").trim())
         .sorted(Comparator.comparingInt(s -> -s.length()))
         .collect(Collectors.toList());
     String result = results.get(0);
