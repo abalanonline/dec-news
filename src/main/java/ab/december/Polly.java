@@ -26,6 +26,7 @@ import software.amazon.awssdk.services.polly.model.VoiceId;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -34,15 +35,18 @@ import java.util.stream.Collectors;
 // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
 public class Polly {
 
-  private static final Logger log = Logger.getLogger(GptThree.class.getName());
+  private static final Logger log = Logger.getLogger(Polly.class.getName());
 
+  public static final String[] VOICES_BLACKLIST = new String[]{};
   private final PollyClient client;
   private List<VoiceId> voicesAvailable;
 
   public Polly() {
+    HashSet<String> voicesBlacklist = new HashSet<>(List.of(VOICES_BLACKLIST));
     client = PollyClient.builder().build();
     List<Voice> voices = client.describeVoices().voices().stream()
-        .filter(u -> u.languageCode().toString().startsWith("fr"))
+        .filter(u -> u.languageCode().toString().startsWith("fr-FR"))
+        .filter(u -> !voicesBlacklist.contains(u.id().toString()))
         .collect(Collectors.toList());
     log.info("voice: " + voices.stream()
         .map(v -> v.languageCode() + " " + v.gender().toString().charAt(0) + " " + v.id().toString())

@@ -23,10 +23,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
-import static ab.december.GptThree.httpGet;
+import static ab.december.GptClient.httpGet;
 
 public class App {
 
@@ -35,8 +38,36 @@ public class App {
   public static final String TAGLINE = "Should you quit being a pigeon? Ornithologists say yes!";
   public static final String THEMATIC_BREAK = "\n\n---\n\n";
 
+  public static final int GPT3_ATTEMPTS = 3;
+  public static final int GPT3_SYMBOLS_THRESHOLD = 512; // about 30 seconds of reading
+  public static final double GPT3_TEMPERATURE = 1.2;
+  public static final int GPT3_TOKENS = 200;
+  public static final String[] CONTEXT_KEY = {"Headline", "Description", "Tagline"};
+  public static String makeNews(GptClient gptClient, String... context) {
+    for (String text : context) {
+      if (gptClient.isFlagged(text)) return null;
+    }
+
+    StringBuilder prompt = new StringBuilder();
+    prompt.append("Latest news.\n\n");
+    for (int i = 0; i < Math.min(CONTEXT_KEY.length, context.length); i++) {
+      prompt.append(CONTEXT_KEY[i]).append(": ").append(context[i]).append("\n\n");
+    }
+    prompt.append("Text:");
+
+    List<String> results = gptClient.completions(prompt.toString(), GPT3_TOKENS, GPT3_ATTEMPTS).stream()
+        .map(u -> u.replaceFirst("[^.]*\\z", "").replace("Text:", "").trim())
+        .sorted(Comparator.comparingInt(s -> -s.length()))
+        .collect(Collectors.toList());
+    String result = results.get(0);
+    if (result.length() > GPT3_SYMBOLS_THRESHOLD) return result;
+    result = results.get(0) + " " + results.get(1);
+    if (result.length() > GPT3_SYMBOLS_THRESHOLD) return result;
+    return null;
+  }
+
   public static void main(String[] args) throws Exception {
-    GptThree gptThree = new GptThree();
+    GptClient gptClient = new GptClient().model(GptClient.GPT3_MODELS[2]).temperature(GPT3_TEMPERATURE);
     Translate translate = new Translate();
     Polly polly = new Polly();
     // CBC NEWS NETWORK is Canada's most trusted 24-hour news channel
@@ -51,7 +82,7 @@ public class App {
       Path pathTxt = Paths.get("news_" + hashCode.toString() + ".txt");
       if (Files.exists(pathTxt)) continue;
       log.info(hashCode + " " + sPrompt0);
-      String sEn = gptThree.makeNews(sPrompt0, sPrompt1);
+      String sEn = makeNews(gptClient, sPrompt0, sPrompt1);
       String sFr = translate.enToFr(sEn);
       Files.writeString(pathTxt, sFr + THEMATIC_BREAK + sEn + THEMATIC_BREAK + sPrompt);
       Files.copy(polly.tts(sFr, hashCode), Paths.get("news_" + hashCode.toString() + ".mp3"));
